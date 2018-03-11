@@ -1,7 +1,6 @@
 import struct
 
 import numpy as np
-from PIL import Image
 
 
 def readBmp(path):
@@ -67,143 +66,111 @@ def writeBmp(path, header, rgb_array):
     out.write(rgb_array.tobytes())
 
 
-def getRgb(src_path):
-    im = Image.open(src_path)
-    return np.array(im)
-
-
-def saveYCbCr(matrix, full_path):
-    x = matrix.shape[0]
-    y = matrix.shape[1]
-    res_array = np.zeros((x, y, 3), 'uint8')
-    res_array[..., 0] = matrix
-    res_array[..., 1] = matrix
-    res_array[..., 2] = matrix
-
-    image = Image.fromarray(res_array, mode="RGB")
-    image.save(full_path)
-
-
 def correlation(a, b):
     exp_val_a = expectedValue(a)
     exp_val_b = expectedValue(b)
 
-    res_top = 0
-    res_bot1 = 0
-    res_bot2 = 0
-    for x, y in zip(np.nditer(a), np.nditer(b)):
-        res_top += (x - exp_val_a) * (y - exp_val_b)
-        res_bot1 += ((x - exp_val_a) ** 2)
-        res_bot2 += ((y - exp_val_b) ** 2)
+    res_top = np.sum((a - exp_val_a) * (b - exp_val_b))
+    res_bot = np.sum(((a - exp_val_a) ** 2)) * np.sum((b - exp_val_b) ** 2)
 
-    return res_top / np.sqrt(res_bot1 * res_bot2)
+    return res_top / np.sqrt(res_bot)
 
 
 def expectedValue(value):
-    h = value.shape[0]
-    w = value.shape[1]
-    result = 0.0
-    for j in range(0, h):
-        for i in range(0, w):
-            result += value[j][i]
-    return result / (w * h)
+    return np.average(value)
 
 
 def standardDeviation(value):
-    h = value.shape[0]
-    w = value.shape[1]
     exp_val = expectedValue(value)
 
-    result = 0.0
-    for j in range(0, h):
-        for i in range(0, w):
-            result += ((value[j][i] - exp_val) ** 2)
-
-    result = np.sqrt(result / (w * h - 1))
+    result = np.sum((value - exp_val) ** 2)
+    result = np.sqrt(result / (value.size - 1))
     return result
-
-
-def separateColors(src_path, dst_path):
-    im = Image.open(src_path)
-    r, g, b = im.split()
-    r = np.array(r)
-    g = np.array(g)
-    b = np.array(b)
-    x = r.shape[0]
-    y = r.shape[1]
-    red_map = np.zeros((x, y, 3), 'uint8')
-    red_map[..., 0] = r
-    blue_map = np.zeros((x, y, 3), 'uint8')
-    blue_map[..., 2] = b
-    green_map = np.zeros((x, y, 3), 'uint8')
-    green_map[..., 1] = g
-    im_red = Image.fromarray(red_map, mode="RGB")
-    im_blue = Image.fromarray(blue_map, mode="RGB")
-    im_green = Image.fromarray(green_map, mode="RGB")
-    im_red.save(dst_path + "\\r.bmp")
-    im_blue.save(dst_path + "\\b.bmp")
-    im_green.save(dst_path + "\\g.bmp")
-
-
-def getColorArray(path, color_name):
-    colors_number = {'r': 0, 'g': 1, 'b': 2}
-    im = Image.open(path)
-    p = np.array(im)
-    return p[..., colors_number[color_name]]
 
 
 def convertYCbCr(value):
     h = value.shape[0]
     w = value.shape[1]
-
-    result = np.zeros((h, w, 3), 'uint8')
-
-    for i in np.arange(0, h):
-        for j in np.arange(0, w):
-            pixel = value[i][j]
-            r = pixel[0]
-            g = pixel[1]
-            b = pixel[2]
-            result[i][j][0] = 0.299 * r + 0.587 * g + 0.114 * b
-            tmp = 0.5643 * (b - float(result[i][j][0])) + 128
-            if tmp > 255:
-                result[i][j][1] = 255
-            else:
-                result[i][j][1] = tmp
-            tmp2 = 0.7132 * (r - float(result[i][j][0])) + 128
-            if tmp2 > 255:
-                result[i][j][2] = 255
-            else:
-                result[i][j][2] = tmp2
-    return result
+    xform = np.array([[.299, .587, .114], [-.1687, -.3313, .5], [.5, -.4187, -.0813]])
+    ycbcr = value.dot(xform.T)
+    ycbcr[:, :, [1, 2]] += 128
+    return np.uint8(ycbcr)
 
 
 def inverseConvertYCbCr(value):
-    h = value.shape[0]
-    w = value.shape[1]
-
-    result = np.zeros((h, w, 3), 'uint8')
-
-    for i in range(0, h):
-        for j in range(0, w):
-            pixel = value[i][j]
-            y = pixel[0]
-            cb = pixel[1]
-            cr = pixel[2]
-            result[i][j][0] = y + 1.402 * (cr - 128)
-            result[i][j][1] = y - 0.714 * (cr - 128) - 0.334 * (cb - 128)
-            result[i][j][2] = y + 1.772 * (cb - 128)
-
-    return result
+    xform = np.array([[1, 0, 1.402], [1, -0.34414, -.71414], [1, 1.772, 0]])
+    rgb = value.astype(np.float)
+    rgb[:, :, [1, 2]] -= 128
+    return np.uint8(rgb.dot(xform.T))
 
 
 def psnr(src, transformed):
     h = src.shape[0]
     w = src.shape[1]
-    l = 8
     bottom = 0
+    bottom = np.sum((src - transformed) ** 2)
     for i in range(0, h):
         for j in range(0, w):
-            bottom += ((float(src[i][j]) - transformed[i][j]) ** 2)
-    top = w * h * ((2 ** l) - 1) ** 2
+            # bottom += ((float(src[i][j]) - transformed[i][j]) ** 2)
+            pass
+    top = w * h * ((2 ** 8) - 1) ** 2
     return 10 * np.log10(top / bottom)
+
+
+def decimationByDeletingEven(value, n):
+    result = np.copy(value[::n, ::n])
+    return result
+
+
+def decimationByAverageValue(value, n):
+    y = value.shape[0]
+    x = value.shape[1]
+    res = np.zeros((y, x), 'uint8')
+    for i in range(0, y, n):
+        for j in range(0, x, n):
+            w = 0
+            avg = 0
+            if i + 1 < y:
+                w += 1
+                avg += value[i + 1][j]
+            if i - 1 > 0:
+                w += 1
+                avg += value[i - 1][j]
+            if j + 1 < x:
+                w += 1
+                avg += value[i][j + 1]
+            if j - 1 > 0:
+                w += 1
+                avg += value[i][j - 1]
+            res[i][j] = avg // w
+    return decimationByDeletingEven(res, n)
+
+
+def recoverDecimationByDeletingEven(value, n):
+    y = value.shape[0]
+    x = value.shape[1]
+    res = np.zeros((y * n, x))
+    for i in range(0, y):
+        j = i * n
+        for z in range(0, n):
+            res[j + z, ...] = value[i, ...]
+    res = np.hstack((res, np.zeros((res.shape[0], x * (n - 1)), dtype='uint8')))
+    value = np.copy(res)
+    for i in range(0, x):
+        j = i * n
+        for z in range(0, n):
+            res[..., j + z] = value[..., i]
+    return res
+
+
+def auto_correlation(array, y, t):
+    if y != 0:
+        a = array[y:, ...]
+        b = array[:-y, ...]
+    else:
+        a = array
+        b = array
+    crl = []
+    for i in t:
+        crl.append((correlation(a[-i:, ...], b[:i, ...])))
+    return crl

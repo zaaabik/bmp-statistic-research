@@ -82,18 +82,19 @@ def expectedValue(value):
 
 def standardDeviation(value):
     exp_val = expectedValue(value)
-
     result = np.sum((value - exp_val) ** 2)
     result = np.sqrt(result / (value.size - 1))
     return result
 
 
 def convertYCbCr(value):
-    h = value.shape[0]
-    w = value.shape[1]
+    value = value.astype(np.int32)
     xform = np.array([[.299, .587, .114], [-.1687, -.3313, .5], [.5, -.4187, -.0813]])
     ycbcr = value.dot(xform.T)
     ycbcr[:, :, [1, 2]] += 128
+    print(ycbcr.min())
+    print(ycbcr.max())
+    np.putmask(ycbcr, ycbcr > 256, 255)
     return np.uint8(ycbcr)
 
 
@@ -101,18 +102,20 @@ def inverseConvertYCbCr(value):
     xform = np.array([[1, 0, 1.402], [1, -0.34414, -.71414], [1, 1.772, 0]])
     rgb = value.astype(np.float)
     rgb[:, :, [1, 2]] -= 128
-    return np.uint8(rgb.dot(xform.T))
+    print(rgb.min())
+    print(rgb.max())
+    rgb = rgb.dot(xform.T)
+    np.putmask(rgb, rgb < 0, 0)
+    np.putmask(rgb, rgb > 255, 255)
+    print(rgb.min())
+    print(rgb.max())
+    return np.uint8(rgb)
 
 
 def psnr(src, transformed):
     h = src.shape[0]
     w = src.shape[1]
-    bottom = 0
     bottom = np.sum((src - transformed) ** 2)
-    for i in range(0, h):
-        for j in range(0, w):
-            # bottom += ((float(src[i][j]) - transformed[i][j]) ** 2)
-            pass
     top = w * h * ((2 ** 8) - 1) ** 2
     return 10 * np.log10(top / bottom)
 
@@ -164,13 +167,39 @@ def recoverDecimationByDeletingEven(value, n):
 
 
 def auto_correlation(array, y, t):
-    if y != 0:
-        a = array[y:, ...]
-        b = array[:-y, ...]
-    else:
+    if y == 0:
         a = array
         b = array
+    else:
+        if y > 0:
+            a = array[y:, ...]
+            b = array[:-y, ...]
+        else:
+            a = array[:y, ...]
+            b = array[-y:, ...]
     crl = []
+    # crl = [(correlation(a[..., -i:], b[..., :i])) for i in t]
     for i in t:
-        crl.append((correlation(a[-i:, ...], b[:i, ...])))
+        if i != 0:
+            crl.append((correlation(a[..., :-i], b[..., i:])))
+        else:
+            crl.append((correlation(a, b)))
     return crl
+
+
+def DPCM(rgb, mode):
+    # rgb = rgb[..., 0]
+    y = rgb.shape[0]
+    x = rgb.shape[1]
+    if mode == 1:
+        return rgb[1:, :-1]
+    if mode == 2:
+        return rgb[:-1, 1:]
+    if mode == 3:
+        return rgb[:-1, :-1]
+    if mode == 4:
+        res = np.ndarray((y - 1, x - 1), int)
+        for i in range(1, y):
+            for j in range(1, x):
+                res[i - 1][j - 1] = (float(rgb[i][j - 1]) + float(rgb[i - 1][j]) + float(rgb[i - 1][j - 1])) / 3
+        return res

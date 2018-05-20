@@ -112,14 +112,11 @@ def componentHistogramsAndEntropy(rgb):
         cr.append(freq_cr[i])
         y.append(freq_y[i])
     size = rgb[..., 0].size
-    for i in range(0, 255):
-        b[i] = b[i] / size
-        g[i] = g[i] / size
-        r[i] = r[i] / size
-        cb[i] = cb[i] / size
-        cr[i] = cr[i] / size
-        y[i] = y[i] / size
 
+    plt.bar(x, y)
+    plt.title("y")
+    plt.savefig("images\\y hist.png")
+    plt.clf()
     plt.bar(x, b)
     plt.title("blue")
     plt.savefig("images\\blue hist.png")
@@ -244,6 +241,10 @@ def DPCM(rgb, func_type):
 
 
 header, rgb = bmp.readBmp(in_file)
+
+a = rgb[...][...][0] - rgb[...][...][1]
+print(np.max(a))
+sys.exit(0)
 y_cb_cr = bmp.convertYCbCr(rgb)
 cbDecimated = bmp.decimationByDeletingEven(y_cb_cr[..., 1], 4)
 crDecimated = bmp.decimationByDeletingEven(y_cb_cr[..., 2], 4)
@@ -256,7 +257,6 @@ bmp.writeBmp(res_file_path + "testRec.bmp", header, rgb2)
 print(bmp.psnr(rgb[..., 0], rgb2[..., 0]))
 print(bmp.psnr(rgb[..., 1], rgb2[..., 1]))
 print(bmp.psnr(rgb[..., 2], rgb2[..., 2]))
-sys.exit(0)
 sys.stdout = open('console.txt', 'w')
 
 b = rgb[..., 0]

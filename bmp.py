@@ -27,6 +27,8 @@ def readBmp(path):
     ar = np.array(ba)
     size = ar.size
     padding = size - header['rawImageSize'][0]
+    if padding > 3:
+        padding = 0
     ar = np.delete(ar, range(size - 1 - padding, size - 1))
     width = header['width'][0]
     padding_size = (width * 3) % 4
@@ -92,8 +94,6 @@ def convertYCbCr(value):
     xform = np.array([[.299, .587, .114], [-.1687, -.3313, .5], [.5, -.4187, -.0813]])
     ycbcr = value.dot(xform.T)
     ycbcr[:, :, [1, 2]] += 128
-    print(ycbcr.min())
-    print(ycbcr.max())
     np.putmask(ycbcr, ycbcr > 256, 255)
     return np.uint8(ycbcr)
 
@@ -102,22 +102,20 @@ def inverseConvertYCbCr(value):
     xform = np.array([[1, 0, 1.402], [1, -0.34414, -.71414], [1, 1.772, 0]])
     rgb = value.astype(np.float)
     rgb[:, :, [1, 2]] -= 128
-    print(rgb.min())
-    print(rgb.max())
     rgb = rgb.dot(xform.T)
     np.putmask(rgb, rgb < 0, 0)
     np.putmask(rgb, rgb > 255, 255)
-    print(rgb.min())
-    print(rgb.max())
     return np.uint8(rgb)
 
 
 def psnr(src, transformed):
     h = src.shape[0]
     w = src.shape[1]
-    bottom = np.sum((src - transformed) ** 2)
-    top = w * h * ((2 ** 8) - 1) ** 2
-    return 10 * np.log10(top / bottom)
+    mse = np.mean((src - transformed) ** 2)
+    if mse == 0:
+        return 100
+    MAX = 255.0
+    return 20 * np.log10(MAX / np.sqrt(mse))
 
 
 def decimationByDeletingEven(value, n):
@@ -178,7 +176,6 @@ def auto_correlation(array, y, t):
             a = array[:y, ...]
             b = array[-y:, ...]
     crl = []
-    # crl = [(correlation(a[..., -i:], b[..., :i])) for i in t]
     for i in t:
         if i != 0:
             crl.append((correlation(a[..., :-i], b[..., i:])))
